@@ -815,10 +815,9 @@ function renderScripts() {
       <span class="script-item-preview">${s.text.substring(0, 50)}</span>
       <button class="btn-delete-script" data-idx="${i}">x</button>
     `;
-    div.querySelector('.script-item-title').onclick = () => {
+    div.onclick = () => {
       scriptInput.value = s.text;
       scriptsModal.classList.remove('active');
-      updateEditorEta();
     };
     div.querySelector('.btn-delete-script').onclick = (e) => {
       e.stopPropagation();
