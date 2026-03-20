@@ -556,9 +556,9 @@
       <div class="setting-row">
         <span class="setting-label">Video Quality</span>
         <select class="setting-select" id="qualitySelect">
-          <option value="720">720p HD</option>
-          <option value="1080" selected>1080p Full HD</option>
-          <option value="2160">4K Ultra HD</option>
+          <option value="720">720p HD (15 Mbps)</option>
+          <option value="1080" selected>1080p Full HD (35 Mbps)</option>
+          <option value="2160">4K Ultra HD (100 Mbps)</option>
         </select>
       </div>
       <div class="setting-row">
@@ -672,7 +672,7 @@ const state = {
   videoQuality: '1080'
 };
 
-const qualityBitrates = { '720': 8000000, '1080': 16000000, '2160': 40000000 };
+const qualityBitrates = { '720': 15000000, '1080': 35000000, '2160': 100000000 };
 
 // ===== ELEMENTS =====
 const $ = id => document.getElementById(id);
@@ -852,8 +852,8 @@ async function startCamera() {
     if (state.stream) state.stream.getTracks().forEach(t => t.stop());
     const q = qualityMap[state.videoQuality] || qualityMap['1080'];
     state.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h } },
-      audio: true
+      video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 48000 }
     });
     cameraView.srcObject = state.stream;
   } catch (err) {
@@ -952,7 +952,7 @@ function startRecording() {
   state.recordedChunks = [];
   const mimeType = getMimeType();
   const bitrate = qualityBitrates[state.videoQuality] || qualityBitrates['1080'];
-  const options = { videoBitsPerSecond: bitrate };
+  const options = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 256000 };
   if (mimeType) options.mimeType = mimeType;
 
   try {
