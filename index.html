@@ -567,15 +567,15 @@
           <button class="btn-stepper" id="fontUp">+</button>
         </div>
       </div>
-      <div class="setting-row">
-        <div>
-          <span class="setting-label">Scroll Speed</span>
-          <div class="setting-hint" id="etaHint">~0 sec to read</div>
+      <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="setting-label">Read Time</span>
+          <span class="setting-value" id="readTimeVal" style="min-width:auto;color:var(--accent);font-weight:600">1:00</span>
         </div>
-        <div class="setting-control">
-          <button class="btn-stepper" id="speedDown">-</button>
-          <span class="setting-value" id="speedVal">3</span>
-          <button class="btn-stepper" id="speedUp">+</button>
+        <input type="range" id="readTimeSlider" min="10" max="600" value="60" step="5" style="width:100%">
+        <div style="display:flex;justify-content:space-between">
+          <span class="setting-hint">10 sec</span>
+          <span class="setting-hint">10 min</span>
         </div>
       </div>
       <div class="setting-row">
@@ -626,9 +626,9 @@
 
   <div class="prompter-controls">
     <div class="speed-bar">
-      <span class="speed-label">Speed</span>
-      <input type="range" id="liveSpeed" min="1" max="10" value="3" step="1">
-      <span class="speed-time" id="liveEta">~0:00</span>
+      <span class="speed-label">Time</span>
+      <input type="range" id="liveSpeed" min="10" max="600" value="60" step="5">
+      <span class="speed-time" id="liveEta">1:00</span>
     </div>
     <div class="controls-row">
       <button class="btn-control" id="btnRestart">
@@ -697,7 +697,7 @@
 // ===== STATE =====
 const state = {
   fontSize: 24,
-  speed: 3,
+  readTimeSec: 60,
   mirror: false,
   countdown: true,
   scrolling: false,
@@ -711,6 +711,7 @@ const state = {
   timerSeconds: 0,
   animFrame: null,
   totalTextHeight: 0,
+  pxPerSec: 0,
   saveQuality: 'medium',
   videoQuality: '1080'
 };
@@ -735,65 +736,48 @@ const scriptsList = $('scriptsList');
 const btnRecord = $('btnRecord');
 const etaBadge = $('etaBadge');
 const liveEta = $('liveEta');
-const etaHint = $('etaHint');
 const saveModal = $('saveModal');
+const readTimeSlider = $('readTimeSlider');
+const readTimeVal = $('readTimeVal');
 
-// ===== ETA CALCULATION =====
-// Speed 1 = 30px/sec, Speed 10 = 300px/sec (linear)
-function getPixelsPerSecond(speed) {
-  return 8 + (speed - 1) * 14;
-}
-// Speed 1 = 8px/sec (very slow), Speed 5 = 64px/sec, Speed 10 = 134px/sec
-
-function calcEtaSeconds(speed, remainingPx) {
-  if (remainingPx <= 0) return 0;
-  return Math.ceil(remainingPx / getPixelsPerSecond(speed));
-}
-
-function formatEta(totalSec) {
-  if (totalSec <= 0) return '0 sec';
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  if (m === 0) return `${s} sec`;
-  return `${m} min ${s > 0 ? s + ' sec' : ''}`;
-}
-
-function formatEtaShort(totalSec) {
+// ===== TIME FORMATTING =====
+function formatTime(totalSec) {
   if (totalSec <= 0) return '0:00';
   const m = Math.floor(totalSec / 60);
-  const s = String(totalSec % 60).padStart(2, '0');
+  const s = String(Math.round(totalSec) % 60).padStart(2, '0');
   return `${m}:${s}`;
 }
 
-function updateEditorEta() {
-  // Estimate: avg 20 chars per line, line height ~fontSize*1.6, screen width ~350px effective
-  const text = scriptInput.value;
-  if (!text.trim()) { etaHint.textContent = '~0 sec to read'; return; }
-  const charsPerLine = Math.floor(340 / (state.fontSize * 0.55));
-  const lines = text.split('\n').reduce((total, line) => {
-    return total + Math.max(1, Math.ceil(line.length / charsPerLine));
-  }, 0);
-  const totalHeight = lines * state.fontSize * 1.6;
-  const eta = calcEtaSeconds(state.speed, totalHeight);
-  etaHint.textContent = `~${formatEta(eta)} to read`;
+// ===== SPEED FROM TIME =====
+function calcPxPerSec(totalHeight, timeSec) {
+  if (timeSec <= 0 || totalHeight <= 0) return 10;
+  return totalHeight / timeSec;
 }
 
 function updateLiveEta() {
-  const remaining = state.totalTextHeight + state.scrollPos; // scrollPos is negative
-  const eta = calcEtaSeconds(state.speed, Math.max(0, remaining));
-  const short = formatEtaShort(eta);
-  liveEta.textContent = `~${short}`;
-  etaBadge.textContent = `~${short} left`;
+  const remaining = state.totalTextHeight + state.scrollPos;
+  const remainSec = state.pxPerSec > 0 ? Math.max(0, remaining) / state.pxPerSec : 0;
+  const short = formatTime(Math.ceil(remainSec));
+  liveEta.textContent = short;
+  etaBadge.textContent = `${short} left`;
 }
 
+function updateReadTimeDisplay() {
+  readTimeVal.textContent = formatTime(state.readTimeSec);
+}
+
+// ===== EDITOR READ TIME SLIDER =====
+readTimeSlider.oninput = () => {
+  state.readTimeSec = parseInt(readTimeSlider.value);
+  updateReadTimeDisplay();
+};
+
 // Update ETA when text changes
-scriptInput.addEventListener('input', updateEditorEta);
+scriptInput.addEventListener('input', () => {});
 
 // ===== SETTINGS =====
-$('fontDown').onclick = () => { state.fontSize = Math.max(14, state.fontSize - 2); $('fontSizeVal').textContent = state.fontSize; updateEditorEta(); };
-$('fontUp').onclick = () => { state.fontSize = Math.min(60, state.fontSize + 2); $('fontSizeVal').textContent = state.fontSize; updateEditorEta(); };
-$('speedDown').onclick = () => { state.speed = Math.max(1, state.speed - 1); $('speedVal').textContent = state.speed; liveSpeed.value = state.speed; updateEditorEta(); };
-$('speedUp').onclick = () => { state.speed = Math.min(10, state.speed + 1); $('speedVal').textContent = state.speed; liveSpeed.value = state.speed; updateEditorEta(); };
+$('fontDown').onclick = () => { state.fontSize = Math.max(14, state.fontSize - 2); $('fontSizeVal').textContent = state.fontSize; };
+$('fontUp').onclick = () => { state.fontSize = Math.min(60, state.fontSize + 2); $('fontSizeVal').textContent = state.fontSize; };
 
 $('mirrorToggle').onclick = function() {
   state.mirror = !state.mirror;
@@ -805,8 +789,11 @@ $('countdownToggle').onclick = function() {
   this.classList.toggle('on', state.countdown);
 };
 
+// Live speed slider: adjusts total read time, recalculates px/sec
 liveSpeed.oninput = () => {
-  state.speed = parseInt(liveSpeed.value);
+  state.readTimeSec = parseInt(liveSpeed.value);
+  state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
+  liveEta.textContent = formatTime(state.readTimeSec);
   updateLiveEta();
 };
 
@@ -817,9 +804,10 @@ $('btnFontLive').onclick = () => {
   fontCycleIndex = (fontCycleIndex + 1) % fontSizes.length;
   state.fontSize = fontSizes[fontCycleIndex];
   prompterText.style.fontSize = state.fontSize + 'px';
-  // Recalculate total text height after font change
+  // Recalculate total text height and speed after font change
   requestAnimationFrame(() => {
     state.totalTextHeight = prompterText.offsetHeight;
+    state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
     updateLiveEta();
   });
 };
@@ -954,10 +942,9 @@ function startScroll() {
 
   function scroll(now) {
     if (!state.scrolling) return;
-    const dt = (now - lastScrollTime) / 1000; // delta in seconds
+    const dt = (now - lastScrollTime) / 1000;
     lastScrollTime = now;
-    const pxPerSec = getPixelsPerSecond(state.speed);
-    state.scrollPos -= pxPerSec * dt;
+    state.scrollPos -= state.pxPerSec * dt;
     textWrapper.style.transform = `translateY(${state.scrollPos}px)`;
     updateLiveEta();
     state.animFrame = requestAnimationFrame(scroll);
@@ -1108,17 +1095,21 @@ $('btnStart').onclick = async () => {
   prompterText.style.fontSize = state.fontSize + 'px';
   cameraView.classList.toggle('mirrored', state.mirror);
   resetScroll();
-  liveSpeed.value = state.speed;
+  liveSpeed.value = state.readTimeSec;
 
   editorScreen.classList.remove('active');
   prompterScreen.classList.add('active');
 
   await startCamera();
 
-  // Measure actual text height after render
-  requestAnimationFrame(() => {
-    state.totalTextHeight = prompterText.offsetHeight;
-    updateLiveEta();
+  // Measure actual text height after render and calculate speed
+  await new Promise(resolve => {
+    requestAnimationFrame(() => {
+      state.totalTextHeight = prompterText.offsetHeight;
+      state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
+      updateLiveEta();
+      resolve();
+    });
   });
 
   await doCountdown();
