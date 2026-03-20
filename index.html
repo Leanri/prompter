@@ -1065,12 +1065,28 @@ $('btnSaveCancel').onclick = () => {
   pendingBlob = null;
 };
 
-$('btnSaveConfirm').onclick = () => {
+$('btnSaveConfirm').onclick = async () => {
   if (!pendingBlob) return;
+  const fileName = `prompter_${Date.now()}.${pendingExt}`;
+  const file = new File([pendingBlob], fileName, { type: pendingBlob.type });
+
+  // Use Share API on mobile (iOS saves to Photos via "Save Video")
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Prompter Video' });
+      saveModal.classList.remove('active');
+      pendingBlob = null;
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') { return; }
+    }
+  }
+
+  // Fallback: regular download
   const url = URL.createObjectURL(pendingBlob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `prompter_${Date.now()}.${pendingExt}`;
+  a.download = fileName;
   a.click();
   URL.revokeObjectURL(url);
   saveModal.classList.remove('active');
