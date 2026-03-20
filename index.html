@@ -230,25 +230,42 @@
 
   .reading-line {
     position: absolute;
-    left: 20px; right: 20px;
-    height: 4px;
-    background: var(--accent);
-    opacity: 0.6;
-    z-index: 15;
-    border-radius: 2px;
+    left: 0; right: 0;
+    height: 44px;
+    z-index: 30;
     cursor: grab;
     touch-action: none;
+    display: flex;
+    align-items: center;
   }
   .reading-line:active { cursor: grabbing; }
+  .reading-line-bar {
+    width: 100%;
+    height: 3px;
+    background: var(--accent);
+    opacity: 0.7;
+    border-radius: 2px;
+    margin: 0 20px;
+  }
   .reading-line-handle {
     position: absolute;
-    right: -2px;
-    top: -10px;
-    width: 24px;
-    height: 24px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     background: var(--accent);
-    opacity: 0.8;
+    opacity: 0.9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .reading-line-handle::before {
+    content: '';
+    width: 12px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+    box-shadow: 0 -4px 0 #fff, 0 4px 0 #fff;
   }
 
   .prompter-controls {
@@ -554,14 +571,11 @@
         </div>
       </div>
       <div class="setting-row" style="flex-direction:column;align-items:stretch;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span class="setting-label">Read Time</span>
-          <span class="setting-value" id="readTimeVal" style="min-width:auto;color:var(--accent);font-weight:600">1:00</span>
-        </div>
-        <input type="range" id="readTimeSlider" min="10" max="600" value="60" step="5" style="width:100%">
-        <div style="display:flex;justify-content:space-between">
-          <span class="setting-hint">10 sec</span>
-          <span class="setting-hint">10 min</span>
+        <span class="setting-label">Scroll Speed</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="setting-hint">Slow</span>
+          <input type="range" id="editorSpeed" min="1" max="20" value="5" step="1" style="flex:1">
+          <span class="setting-hint">Fast</span>
         </div>
       </div>
       <div class="setting-row">
@@ -599,7 +613,7 @@
       <div class="prompter-text" id="prompterText"></div>
     </div>
   </div>
-  <div class="reading-line" id="readingLine"><div class="reading-line-handle"></div></div>
+  <div class="reading-line" id="readingLine"><div class="reading-line-bar"></div><div class="reading-line-handle"></div></div>
 
   <button class="btn-control btn-back-prompter" id="btnBack">
     <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -612,9 +626,9 @@
 
   <div class="prompter-controls">
     <div class="speed-bar">
-      <span class="speed-label">Time</span>
-      <input type="range" id="liveSpeed" min="10" max="600" value="60" step="5">
-      <span class="speed-time" id="liveEta">1:00</span>
+      <span class="speed-label">Slow</span>
+      <input type="range" id="liveSpeed" min="1" max="20" value="5" step="1">
+      <span class="speed-label">Fast</span>
     </div>
     <div class="controls-row">
       <button class="btn-control" id="btnRestart">
@@ -664,7 +678,7 @@
 // ===== STATE =====
 const state = {
   fontSize: 24,
-  readTimeSec: 60,
+  speedLevel: 5,
   mirror: false,
   countdown: true,
   scrolling: false,
@@ -678,7 +692,6 @@ const state = {
   timerSeconds: 0,
   animFrame: null,
   totalTextHeight: 0,
-  pxPerSec: 0,
   saveQuality: 'medium',
   videoQuality: '1080'
 };
@@ -702,49 +715,29 @@ const scriptsModal = $('scriptsModal');
 const scriptsList = $('scriptsList');
 const btnRecord = $('btnRecord');
 const etaBadge = $('etaBadge');
-const liveEta = $('liveEta');
 const saveModal = $('saveModal');
-const readTimeSlider = $('readTimeSlider');
-const readTimeVal = $('readTimeVal');
 
-// ===== TIME FORMATTING =====
-function formatTime(totalSec) {
-  if (totalSec <= 0) return '0:00';
-  const m = Math.floor(totalSec / 60);
-  const s = String(Math.round(totalSec) % 60).padStart(2, '0');
-  return `${m}:${s}`;
+// ===== SPEED =====
+// Speed 1=5px/sec (very slow), 10=50px/sec (medium), 20=150px/sec (fast)
+function getPixelsPerSecond(level) {
+  return 3 + level * level * 0.4;
 }
 
-// ===== SPEED FROM TIME =====
-function calcPxPerSec(totalHeight, timeSec) {
-  if (timeSec <= 0 || totalHeight <= 0) return 10;
-  return totalHeight / timeSec;
-}
-
-function updateLiveEta() {
+function updateEtaBadge() {
   const remaining = state.totalTextHeight + state.scrollPos;
-  const remainSec = state.pxPerSec > 0 ? Math.max(0, remaining) / state.pxPerSec : 0;
-  const short = formatTime(Math.ceil(remainSec));
-  liveEta.textContent = short;
-  etaBadge.textContent = `${short} left`;
+  const pps = getPixelsPerSecond(state.speedLevel);
+  const remainSec = pps > 0 ? Math.max(0, remaining) / pps : 0;
+  const m = Math.floor(remainSec / 60);
+  const s = String(Math.round(remainSec) % 60).padStart(2, '0');
+  etaBadge.textContent = `${m}:${s} left`;
 }
-
-function updateReadTimeDisplay() {
-  readTimeVal.textContent = formatTime(state.readTimeSec);
-}
-
-// ===== EDITOR READ TIME SLIDER =====
-readTimeSlider.oninput = () => {
-  state.readTimeSec = parseInt(readTimeSlider.value);
-  updateReadTimeDisplay();
-};
-
-// Update ETA when text changes
-scriptInput.addEventListener('input', () => {});
 
 // ===== SETTINGS =====
 $('fontDown').onclick = () => { state.fontSize = Math.max(14, state.fontSize - 2); $('fontSizeVal').textContent = state.fontSize; };
 $('fontUp').onclick = () => { state.fontSize = Math.min(60, state.fontSize + 2); $('fontSizeVal').textContent = state.fontSize; };
+
+// Editor speed slider
+$('editorSpeed').oninput = function() { state.speedLevel = parseInt(this.value); };
 
 $('mirrorToggle').onclick = function() {
   state.mirror = !state.mirror;
@@ -756,12 +749,10 @@ $('countdownToggle').onclick = function() {
   this.classList.toggle('on', state.countdown);
 };
 
-// Live speed slider: adjusts total read time, recalculates px/sec
+// Live speed slider
 liveSpeed.oninput = () => {
-  state.readTimeSec = parseInt(liveSpeed.value);
-  state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
-  liveEta.textContent = formatTime(state.readTimeSec);
-  updateLiveEta();
+  state.speedLevel = parseInt(liveSpeed.value);
+  updateEtaBadge();
 };
 
 // ===== FONT LIVE ADJUST =====
@@ -771,11 +762,9 @@ $('btnFontLive').onclick = () => {
   fontCycleIndex = (fontCycleIndex + 1) % fontSizes.length;
   state.fontSize = fontSizes[fontCycleIndex];
   prompterText.style.fontSize = state.fontSize + 'px';
-  // Recalculate total text height and speed after font change
   requestAnimationFrame(() => {
     state.totalTextHeight = prompterText.offsetHeight;
-    state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
-    updateLiveEta();
+    updateEtaBadge();
   });
 };
 
@@ -911,9 +900,9 @@ function startScroll() {
     if (!state.scrolling) return;
     const dt = (now - lastScrollTime) / 1000;
     lastScrollTime = now;
-    state.scrollPos -= state.pxPerSec * dt;
+    state.scrollPos -= getPixelsPerSecond(state.speedLevel) * dt;
     textWrapper.style.transform = `translateY(${state.scrollPos}px)`;
-    updateLiveEta();
+    updateEtaBadge();
     state.animFrame = requestAnimationFrame(scroll);
   }
   state.animFrame = requestAnimationFrame(scroll);
@@ -929,7 +918,6 @@ function pauseScroll() {
 function resetScroll() {
   state.scrollPos = 0;
   textWrapper.style.transform = 'translateY(0)';
-  updateLiveEta();
 }
 
 $('btnPlayPause').onclick = () => state.scrolling ? pauseScroll() : startScroll();
@@ -1070,19 +1058,18 @@ $('btnStart').onclick = async () => {
   prompterText.style.fontSize = state.fontSize + 'px';
   cameraView.classList.toggle('mirrored', state.mirror);
   resetScroll();
-  liveSpeed.value = state.readTimeSec;
+  liveSpeed.value = state.speedLevel;
 
   editorScreen.classList.remove('active');
   prompterScreen.classList.add('active');
 
   await startCamera();
 
-  // Measure actual text height after render and calculate speed
+  // Measure actual text height after render
   await new Promise(resolve => {
     requestAnimationFrame(() => {
       state.totalTextHeight = prompterText.offsetHeight;
-      state.pxPerSec = calcPxPerSec(state.totalTextHeight, state.readTimeSec);
-      updateLiveEta();
+      updateEtaBadge();
       resolve();
     });
   });
@@ -1103,25 +1090,50 @@ $('btnBack').onclick = () => {
 
 // ===== DRAGGABLE READING LINE =====
 const readingLine = $('readingLine');
-let linePos = 33; // vh
+let linePos = 33;
 readingLine.style.top = linePos + 'vh';
 
 let draggingLine = false;
-readingLine.addEventListener('pointerdown', (e) => {
+let dragStartY = 0;
+let dragStartPos = 0;
+
+readingLine.addEventListener('touchstart', (e) => {
   draggingLine = true;
-  readingLine.setPointerCapture(e.pointerId);
+  dragStartY = e.touches[0].clientY;
+  dragStartPos = linePos;
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchmove', (e) => {
+  if (!draggingLine) return;
+  const dy = e.touches[0].clientY - dragStartY;
+  const dvh = (dy / window.innerHeight) * 100;
+  linePos = Math.max(5, Math.min(65, dragStartPos + dvh));
+  readingLine.style.top = linePos + 'vh';
+  textWrapper.style.paddingTop = linePos + 'vh';
+  e.preventDefault();
+}, { passive: false });
+
+document.addEventListener('touchend', () => { draggingLine = false; });
+
+// Mouse fallback for desktop
+readingLine.addEventListener('mousedown', (e) => {
+  draggingLine = true;
+  dragStartY = e.clientY;
+  dragStartPos = linePos;
   e.preventDefault();
 });
 
-document.addEventListener('pointermove', (e) => {
+document.addEventListener('mousemove', (e) => {
   if (!draggingLine) return;
-  const vh = (e.clientY / window.innerHeight) * 100;
-  linePos = Math.max(5, Math.min(60, vh));
+  const dy = e.clientY - dragStartY;
+  const dvh = (dy / window.innerHeight) * 100;
+  linePos = Math.max(5, Math.min(65, dragStartPos + dvh));
   readingLine.style.top = linePos + 'vh';
   textWrapper.style.paddingTop = linePos + 'vh';
 });
 
-document.addEventListener('pointerup', () => { draggingLine = false; });
+document.addEventListener('mouseup', () => { draggingLine = false; });
 
 // ===== TAP TO PAUSE/RESUME SCROLL =====
 $('prompterOverlay').onclick = (e) => {
