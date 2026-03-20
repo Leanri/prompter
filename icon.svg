@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- iOS-style rounded square clip -->
+    <clipPath id="roundedSquare">
+      <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224"/>
+    </clipPath>
+    <!-- Subtle inner glow gradient for background depth -->
+    <radialGradient id="bgGradient" cx="50%" cy="38%" r="62%" fx="50%" fy="30%">
+      <stop offset="0%" stop-color="#2c2c2e"/>
+      <stop offset="100%" stop-color="#1c1c1e"/>
+    </radialGradient>
+    <!-- Blue glow for the arrow -->
+    <filter id="blueGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Soft shadow for text lines -->
+    <filter id="lineShadow" x="-10%" y="-50%" width="120%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background: dark rounded square -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="url(#bgGradient)"/>
+
+  <!-- Decorative subtle border -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224"
+        fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.06"/>
+
+  <!-- ── Text lines (representing teleprompter script) ── -->
+  <!-- All lines are white, varying opacity and width to feel natural -->
+
+  <!-- Line 1 (top, shorter — start of script fading in) -->
+  <rect x="180" y="282" width="480" height="44" rx="22" fill="#ffffff" fill-opacity="0.22" filter="url(#lineShadow)"/>
+
+  <!-- Line 2 -->
+  <rect x="180" y="358" width="664" height="44" rx="22" fill="#ffffff" fill-opacity="0.55" filter="url(#lineShadow)"/>
+
+  <!-- Line 3 (full — main focus line) -->
+  <rect x="180" y="434" width="664" height="44" rx="22" fill="#ffffff" fill-opacity="0.90" filter="url(#lineShadow)"/>
+
+  <!-- Line 4 -->
+  <rect x="180" y="510" width="580" height="44" rx="22" fill="#ffffff" fill-opacity="0.55" filter="url(#lineShadow)"/>
+
+  <!-- Line 5 (shorter — fading out) -->
+  <rect x="180" y="586" width="380" height="44" rx="22" fill="#ffffff" fill-opacity="0.22" filter="url(#lineShadow)"/>
+
+  <!-- ── Blue accent: play / scroll chevron arrow ── -->
+  <!-- Positioned to the right of the text lines, vertically centered -->
+  <!-- A right-pointing "play" triangle, clean and bold -->
+  <g filter="url(#blueGlow)">
+    <!-- Outer glow circle (very subtle) -->
+    <circle cx="780" cy="512" r="96" fill="#0a84ff" fill-opacity="0.12"/>
+    <!-- Play triangle -->
+    <polygon
+      points="748,444 748,580 868,512"
+      fill="#0a84ff"
+    />
+  </g>
+
+  <!-- Thin horizontal divider lines above and below the center line (teleprompter guide marks) -->
+  <line x1="140" y1="425" x2="884" y2="425" stroke="#0a84ff" stroke-width="2" stroke-opacity="0.35"/>
+  <line x1="140" y1="487" x2="884" y2="487" stroke="#0a84ff" stroke-width="2" stroke-opacity="0.35"/>
+
+</svg>
