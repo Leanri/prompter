@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Prompter</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --bg: #000;
+    --surface: rgba(28,28,30,0.85);
+    --surface-solid: #1c1c1e;
+    --text: #f5f5f7;
+    --text-secondary: rgba(245,245,247,0.6);
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --danger: #ff453a;
+    --radius: 14px;
+    --blur: blur(20px);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .screen { display:none; flex-direction:column; height:100dvh; width:100%; position:absolute; top:0; left:0; }
+  .screen.active { display:flex; }
+
+  /* ===== EDITOR SCREEN ===== */
+  #editorScreen {
+    background: var(--bg);
+    padding: env(safe-area-inset-top) 0 0 0;
+  }
+
+  .editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+  }
+
+  .editor-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .header-actions { display:flex; gap:12px; }
+
+  .btn-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface);
+    color: var(--accent);
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .btn-icon:active { transform:scale(0.9); }
+
+  .editor-body { flex:1; padding:0 20px 20px; display:flex; flex-direction:column; gap:16px; overflow:auto; }
+
+  textarea#scriptInput {
+    flex: 1;
+    min-height: 200px;
+    background: var(--surface-solid);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 17px;
+    line-height: 1.6;
+    padding: 16px;
+    resize: none;
+    font-family: var(--font);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea#scriptInput:focus { border-color: var(--accent); }
+  textarea#scriptInput::placeholder { color: var(--text-secondary); }
+
+  .settings-group {
+    background: var(--surface-solid);
+    border-radius: var(--radius);
+    padding: 4px 0;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .setting-row:last-child { border-bottom:none; }
+
+  .setting-label { font-size: 15px; color: var(--text); }
+  .setting-hint { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+  .setting-control { display:flex; align-items:center; gap:10px; }
+
+  .setting-value {
+    font-size: 15px;
+    color: var(--text-secondary);
+    min-width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .btn-stepper {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: var(--accent);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .btn-stepper:active { background: rgba(255,255,255,0.2); }
+
+  .toggle-track {
+    width: 51px;
+    height: 31px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.15);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.25s;
+  }
+  .toggle-track.on { background: #34c759; }
+  .toggle-thumb {
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.25s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .toggle-track.on .toggle-thumb { transform: translateX(20px); }
+
+  .btn-start {
+    width: 100%;
+    padding: 16px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.15s;
+    margin-top: 8px;
+  }
+  .btn-start:active { transform:scale(0.98); background:var(--accent-hover); }
+
+  .import-row { display:flex; gap:10px; }
+
+  .btn-import {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: transparent;
+    color: var(--text);
+    font-size: 14px;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-import:active { background: rgba(255,255,255,0.06); }
+
+  /* ===== PROMPTER SCREEN ===== */
+  #prompterScreen { background: var(--bg); }
+
+  .camera-view {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  .prompter-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 40%;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.5) 70%, transparent 100%);
+    overflow: hidden;
+    z-index: 10;
+  }
+
+  .prompter-text-wrapper {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    padding: 60px 24px 40px;
+  }
+
+  .prompter-text {
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1.6;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .camera-view.mirrored { transform: scaleX(-1); }
+
+  .reading-line {
+    position: absolute;
+    top: 38%;
+    left: 20px; right: 20px;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.6;
+    z-index: 11;
+    pointer-events: none;
+    border-radius: 1px;
+  }
+
+  .prompter-controls {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 70%, transparent 100%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .speed-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+  }
+
+  .speed-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 44px;
+  }
+
+  .speed-time {
+    font-size: 13px;
+    color: var(--accent);
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.2);
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    cursor: pointer;
+  }
+
+  .controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+  }
+
+  .btn-control {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    color: #fff;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .btn-control:active { transform:scale(0.9); }
+
+  .btn-record {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s;
+  }
+
+  .record-dot {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--danger);
+    transition: all 0.3s;
+  }
+
+  .btn-record.recording .record-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+  }
+
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    font-size: 120px;
+    font-weight: 200;
+    color: #fff;
+  }
+  .countdown-overlay.active { display:flex; }
+
+  #fileInput { display:none; }
+
+  /* ===== MODALS ===== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    z-index: 100;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.active { display:flex; }
+
+  .modal-sheet {
+    width: 100%;
+    max-width: 500px;
+    max-height: 70dvh;
+    background: var(--surface-solid);
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-handle {
+    width: 36px;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.2);
+    margin: 0 auto 8px;
+  }
+
+  .modal-sheet h2 { font-size:20px; font-weight:600; }
+
+  .scripts-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .script-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .script-item:active { background: rgba(255,255,255,0.12); }
+
+  .script-item-title { font-size:15px; flex:1; }
+  .script-item-preview { font-size:13px; color:var(--text-secondary); max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .btn-delete-script {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-left: 8px;
+  }
+
+  .timer {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top));
+    right: 16px;
+    z-index: 25;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: rgba(255,0,0,0.7);
+    padding: 4px 10px;
+    border-radius: 8px;
+    display: none;
+  }
+  .timer.active { display:block; }
+
+  .btn-back-prompter {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top));
+    left: 16px;
+    z-index: 25;
+  }
+
+  /* ===== ETA BADGE ===== */
+  .eta-badge {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
+    padding: 4px 12px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  /* ===== QUALITY MODAL ===== */
+  .quality-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .quality-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 12px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text);
+  }
+  .quality-option:active { background: rgba(255,255,255,0.12); }
+  .quality-option.selected { border-color: var(--accent); }
+
+  .quality-option-label { font-size: 16px; font-weight: 500; }
+  .quality-option-detail { font-size: 13px; color: var(--text-secondary); }
+
+  .quality-actions { display:flex; gap:10px; margin-top:8px; }
+
+  .btn-modal {
+    flex: 1;
+    padding: 14px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-modal:active { transform:scale(0.98); }
+  .btn-modal-cancel { background: rgba(255,255,255,0.1); color: var(--text); }
+  .btn-modal-save { background: var(--accent); color: #fff; }
+
+  /* ===== SELECT DROPDOWN ===== */
+  select.setting-select {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: var(--font);
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== EDITOR SCREEN ===== -->
+<div id="editorScreen" class="screen active">
+  <div class="editor-header">
+    <h1>Prompter</h1>
+    <div class="header-actions">
+      <button class="btn-icon" id="btnScripts" title="Saved Scripts">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12v16H4z"/><path d="M8 2v4"/><path d="M12 2v4"/><path d="M8 10h4"/><path d="M8 13h2"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="editor-body">
+    <div class="import-row">
+      <button class="btn-import" id="btnImportFile">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:6px"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 18h16"/></svg>
+        Import File
+      </button>
+      <button class="btn-import" id="btnPaste">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:6px"><path d="M8 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        Paste Text
+      </button>
+    </div>
+
+    <textarea id="scriptInput" placeholder="Type or paste your script here...&#10;&#10;Supports any language: English, Russian, etc."></textarea>
+
+    <div class="settings-group">
+      <div class="setting-row">
+        <span class="setting-label">Font Size</span>
+        <div class="setting-control">
+          <button class="btn-stepper" id="fontDown">-</button>
+          <span class="setting-value" id="fontSizeVal">24</span>
+          <button class="btn-stepper" id="fontUp">+</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div>
+          <span class="setting-label">Scroll Speed</span>
+          <div class="setting-hint" id="etaHint">~0 sec to read</div>
+        </div>
+        <div class="setting-control">
+          <button class="btn-stepper" id="speedDown">-</button>
+          <span class="setting-value" id="speedVal">3</span>
+          <button class="btn-stepper" id="speedUp">+</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Video Quality</span>
+        <select class="setting-select" id="qualitySelect">
+          <option value="720">720p HD</option>
+          <option value="1080" selected>1080p Full HD</option>
+          <option value="2160">4K Ultra HD</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Mirror Mode</span>
+        <div class="toggle-track" id="mirrorToggle">
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Countdown</span>
+        <div class="toggle-track on" id="countdownToggle">
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-start" id="btnStart">Start Prompter</button>
+  </div>
+</div>
+
+<!-- ===== PROMPTER SCREEN ===== -->
+<div id="prompterScreen" class="screen">
+  <video class="camera-view" id="cameraView" autoplay playsinline muted></video>
+
+  <div class="prompter-overlay" id="prompterOverlay">
+    <div class="prompter-text-wrapper" id="textWrapper">
+      <div class="prompter-text" id="prompterText"></div>
+    </div>
+    <div class="reading-line"></div>
+  </div>
+
+  <button class="btn-control btn-back-prompter" id="btnBack">
+    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+
+  <div class="eta-badge" id="etaBadge">~0:00 left</div>
+  <div class="timer" id="timer">00:00</div>
+
+  <div class="countdown-overlay" id="countdown"></div>
+
+  <div class="prompter-controls">
+    <div class="speed-bar">
+      <span class="speed-label">Speed</span>
+      <input type="range" id="liveSpeed" min="1" max="10" value="3" step="1">
+      <span class="speed-time" id="liveEta">~0:00</span>
+    </div>
+    <div class="controls-row">
+      <button class="btn-control" id="btnRestart">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.5 15a8 8 0 104-11.3L1 10"/></svg>
+      </button>
+      <button class="btn-control" id="btnPlayPause">
+        <svg id="iconPlay" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+        <svg id="iconPause" width="22" height="22" fill="currentColor" viewBox="0 0 24 24" style="display:none"><rect x="5" y="3" width="4" height="18"/><rect x="15" y="3" width="4" height="18"/></svg>
+      </button>
+      <button class="btn-record" id="btnRecord"><div class="record-dot"></div></button>
+      <button class="btn-control" id="btnFlipCamera">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7l-4-4-4 4"/><path d="M16 3v10"/><path d="M4 17l4 4 4-4"/><path d="M8 21V11"/></svg>
+      </button>
+      <button class="btn-control" id="btnFontLive">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><text x="4" y="18" font-size="16" font-weight="bold" font-family="sans-serif">A</text></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SCRIPTS MODAL ===== -->
+<div class="modal-overlay" id="scriptsModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <h2>Saved Scripts</h2>
+    <div class="scripts-list" id="scriptsList"></div>
+    <button class="btn-start" id="btnSaveScript">Save Current Script</button>
+  </div>
+</div>
+
+<!-- ===== QUALITY/SAVE MODAL ===== -->
+<div class="modal-overlay" id="saveModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <h2>Save Video</h2>
+    <div class="quality-options" id="qualityOptions">
+      <div class="quality-option" data-quality="low">
+        <div>
+          <div class="quality-option-label">Low</div>
+          <div class="quality-option-detail">480p — small file, fast save</div>
+        </div>
+      </div>
+      <div class="quality-option selected" data-quality="medium">
+        <div>
+          <div class="quality-option-label">Medium</div>
+          <div class="quality-option-detail">720p HD — balanced</div>
+        </div>
+      </div>
+      <div class="quality-option" data-quality="high">
+        <div>
+          <div class="quality-option-label">High</div>
+          <div class="quality-option-detail">1080p Full HD — best quality</div>
+        </div>
+      </div>
+    </div>
+    <div class="quality-actions">
+      <button class="btn-modal btn-modal-cancel" id="btnSaveCancel">Cancel</button>
+      <button class="btn-modal btn-modal-save" id="btnSaveConfirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".txt,.md,.text">
+
+<script>
+// ===== STATE =====
+const state = {
+  fontSize: 24,
+  speed: 3,
+  mirror: false,
+  countdown: true,
+  scrolling: false,
+  recording: false,
+  scrollPos: 0,
+  facingMode: 'user',
+  stream: null,
+  mediaRecorder: null,
+  recordedChunks: [],
+  timerInterval: null,
+  timerSeconds: 0,
+  animFrame: null,
+  totalTextHeight: 0,
+  saveQuality: 'medium',
+  videoQuality: '1080'
+};
+
+const qualityBitrates = { low: 1000000, medium: 2500000, high: 5000000 };
+
+// ===== ELEMENTS =====
+const $ = id => document.getElementById(id);
+const editorScreen = $('editorScreen');
+const prompterScreen = $('prompterScreen');
+const scriptInput = $('scriptInput');
+const prompterText = $('prompterText');
+const textWrapper = $('textWrapper');
+const cameraView = $('cameraView');
+const countdownEl = $('countdown');
+const timerEl = $('timer');
+const liveSpeed = $('liveSpeed');
+const iconPlay = $('iconPlay');
+const iconPause = $('iconPause');
+const scriptsModal = $('scriptsModal');
+const scriptsList = $('scriptsList');
+const btnRecord = $('btnRecord');
+const etaBadge = $('etaBadge');
+const liveEta = $('liveEta');
+const etaHint = $('etaHint');
+const saveModal = $('saveModal');
+
+// ===== ETA CALCULATION =====
+// Speed 1 = 30px/sec, Speed 10 = 300px/sec (linear)
+function getPixelsPerSecond(speed) {
+  return 8 + (speed - 1) * 14;
+}
+// Speed 1 = 8px/sec (very slow), Speed 5 = 64px/sec, Speed 10 = 134px/sec
+
+function calcEtaSeconds(speed, remainingPx) {
+  if (remainingPx <= 0) return 0;
+  return Math.ceil(remainingPx / getPixelsPerSecond(speed));
+}
+
+function formatEta(totalSec) {
+  if (totalSec <= 0) return '0 sec';
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  if (m === 0) return `${s} sec`;
+  return `${m} min ${s > 0 ? s + ' sec' : ''}`;
+}
+
+function formatEtaShort(totalSec) {
+  if (totalSec <= 0) return '0:00';
+  const m = Math.floor(totalSec / 60);
+  const s = String(totalSec % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function updateEditorEta() {
+  // Estimate: avg 20 chars per line, line height ~fontSize*1.6, screen width ~350px effective
+  const text = scriptInput.value;
+  if (!text.trim()) { etaHint.textContent = '~0 sec to read'; return; }
+  const charsPerLine = Math.floor(340 / (state.fontSize * 0.55));
+  const lines = text.split('\n').reduce((total, line) => {
+    return total + Math.max(1, Math.ceil(line.length / charsPerLine));
+  }, 0);
+  const totalHeight = lines * state.fontSize * 1.6;
+  const eta = calcEtaSeconds(state.speed, totalHeight);
+  etaHint.textContent = `~${formatEta(eta)} to read`;
+}
+
+function updateLiveEta() {
+  const remaining = state.totalTextHeight + state.scrollPos; // scrollPos is negative
+  const eta = calcEtaSeconds(state.speed, Math.max(0, remaining));
+  const short = formatEtaShort(eta);
+  liveEta.textContent = `~${short}`;
+  etaBadge.textContent = `~${short} left`;
+}
+
+// Update ETA when text changes
+scriptInput.addEventListener('input', updateEditorEta);
+
+// ===== SETTINGS =====
+$('fontDown').onclick = () => { state.fontSize = Math.max(14, state.fontSize - 2); $('fontSizeVal').textContent = state.fontSize; updateEditorEta(); };
+$('fontUp').onclick = () => { state.fontSize = Math.min(60, state.fontSize + 2); $('fontSizeVal').textContent = state.fontSize; updateEditorEta(); };
+$('speedDown').onclick = () => { state.speed = Math.max(1, state.speed - 1); $('speedVal').textContent = state.speed; liveSpeed.value = state.speed; updateEditorEta(); };
+$('speedUp').onclick = () => { state.speed = Math.min(10, state.speed + 1); $('speedVal').textContent = state.speed; liveSpeed.value = state.speed; updateEditorEta(); };
+
+$('mirrorToggle').onclick = function() {
+  state.mirror = !state.mirror;
+  this.classList.toggle('on', state.mirror);
+};
+
+$('countdownToggle').onclick = function() {
+  state.countdown = !state.countdown;
+  this.classList.toggle('on', state.countdown);
+};
+
+liveSpeed.oninput = () => {
+  state.speed = parseInt(liveSpeed.value);
+  updateLiveEta();
+};
+
+// ===== FONT LIVE ADJUST =====
+let fontCycleIndex = 0;
+const fontSizes = [20, 24, 30, 36, 42];
+$('btnFontLive').onclick = () => {
+  fontCycleIndex = (fontCycleIndex + 1) % fontSizes.length;
+  state.fontSize = fontSizes[fontCycleIndex];
+  prompterText.style.fontSize = state.fontSize + 'px';
+  // Recalculate total text height after font change
+  requestAnimationFrame(() => {
+    state.totalTextHeight = prompterText.offsetHeight;
+    updateLiveEta();
+  });
+};
+
+// ===== IMPORT =====
+$('btnImportFile').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => { scriptInput.value = ev.target.result; updateEditorEta(); };
+  reader.readAsText(file);
+  e.target.value = '';
+};
+
+$('btnPaste').onclick = async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    scriptInput.value = text;
+    updateEditorEta();
+  } catch {
+    scriptInput.focus();
+    document.execCommand('paste');
+  }
+};
+
+// ===== SCRIPTS STORAGE =====
+function getScripts() {
+  try { return JSON.parse(localStorage.getItem('prompter_scripts') || '[]'); }
+  catch { return []; }
+}
+
+function saveScripts(scripts) {
+  localStorage.setItem('prompter_scripts', JSON.stringify(scripts));
+}
+
+function renderScripts() {
+  const scripts = getScripts();
+  scriptsList.innerHTML = '';
+  if (scripts.length === 0) {
+    scriptsList.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px">No saved scripts yet</p>';
+    return;
+  }
+  scripts.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'script-item';
+    div.innerHTML = `
+      <span class="script-item-title">${s.title}</span>
+      <span class="script-item-preview">${s.text.substring(0, 50)}</span>
+      <button class="btn-delete-script" data-idx="${i}">x</button>
+    `;
+    div.querySelector('.script-item-title').onclick = () => {
+      scriptInput.value = s.text;
+      scriptsModal.classList.remove('active');
+      updateEditorEta();
+    };
+    div.querySelector('.btn-delete-script').onclick = (e) => {
+      e.stopPropagation();
+      const sc = getScripts();
+      sc.splice(i, 1);
+      saveScripts(sc);
+      renderScripts();
+    };
+    scriptsList.appendChild(div);
+  });
+}
+
+$('btnScripts').onclick = () => { renderScripts(); scriptsModal.classList.add('active'); };
+scriptsModal.onclick = (e) => { if (e.target === scriptsModal) scriptsModal.classList.remove('active'); };
+
+$('btnSaveScript').onclick = () => {
+  const text = scriptInput.value.trim();
+  if (!text) return;
+  const title = text.substring(0, 40) + (text.length > 40 ? '...' : '');
+  const scripts = getScripts();
+  scripts.unshift({ title, text, date: Date.now() });
+  saveScripts(scripts);
+  renderScripts();
+};
+
+// ===== CAMERA =====
+const qualityMap = { '720': { w: 1280, h: 720 }, '1080': { w: 1920, h: 1080 }, '2160': { w: 3840, h: 2160 } };
+
+async function startCamera() {
+  try {
+    if (state.stream) state.stream.getTracks().forEach(t => t.stop());
+    const q = qualityMap[state.videoQuality] || qualityMap['1080'];
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h } },
+      audio: true
+    });
+    cameraView.srcObject = state.stream;
+  } catch (err) {
+    console.error('Camera error:', err);
+    alert('Could not access camera. Please allow camera access and try again.');
+  }
+}
+
+$('btnFlipCamera').onclick = async () => {
+  state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+  await startCamera();
+};
+
+// ===== COUNTDOWN =====
+function doCountdown() {
+  return new Promise(resolve => {
+    if (!state.countdown) return resolve();
+    let count = 3;
+    countdownEl.classList.add('active');
+    countdownEl.textContent = count;
+    const iv = setInterval(() => {
+      count--;
+      if (count === 0) {
+        clearInterval(iv);
+        countdownEl.classList.remove('active');
+        resolve();
+      } else {
+        countdownEl.textContent = count;
+      }
+    }, 1000);
+  });
+}
+
+// ===== SCROLL =====
+let lastScrollTime = 0;
+
+function startScroll() {
+  state.scrolling = true;
+  iconPlay.style.display = 'none';
+  iconPause.style.display = 'block';
+  lastScrollTime = performance.now();
+
+  function scroll(now) {
+    if (!state.scrolling) return;
+    const dt = (now - lastScrollTime) / 1000; // delta in seconds
+    lastScrollTime = now;
+    const pxPerSec = getPixelsPerSecond(state.speed);
+    state.scrollPos -= pxPerSec * dt;
+    textWrapper.style.transform = `translateY(${state.scrollPos}px)`;
+    updateLiveEta();
+    state.animFrame = requestAnimationFrame(scroll);
+  }
+  state.animFrame = requestAnimationFrame(scroll);
+}
+
+function pauseScroll() {
+  state.scrolling = false;
+  iconPlay.style.display = 'block';
+  iconPause.style.display = 'none';
+  if (state.animFrame) cancelAnimationFrame(state.animFrame);
+}
+
+function resetScroll() {
+  state.scrollPos = 0;
+  textWrapper.style.transform = 'translateY(0)';
+  updateLiveEta();
+}
+
+$('btnPlayPause').onclick = () => state.scrolling ? pauseScroll() : startScroll();
+$('btnRestart').onclick = () => { pauseScroll(); resetScroll(); };
+
+// ===== RECORDING =====
+function updateTimer() {
+  state.timerSeconds++;
+  const m = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
+  const s = String(state.timerSeconds % 60).padStart(2, '0');
+  timerEl.textContent = `${m}:${s}`;
+}
+
+function getMimeType() {
+  // Prefer MP4 for iOS compatibility, fall back to WebM
+  const types = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4',
+    'video/webm;codecs=h264,opus',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
+}
+
+function startRecording() {
+  state.recordedChunks = [];
+  const mimeType = getMimeType();
+  const bitrate = qualityBitrates[state.saveQuality] || qualityBitrates.medium;
+  const options = { videoBitsPerSecond: bitrate };
+  if (mimeType) options.mimeType = mimeType;
+
+  try {
+    state.mediaRecorder = new MediaRecorder(state.stream, options);
+  } catch {
+    state.mediaRecorder = new MediaRecorder(state.stream);
+  }
+
+  state.mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) state.recordedChunks.push(e.data);
+  };
+
+  state.mediaRecorder.onstop = () => {
+    const mime = state.mediaRecorder.mimeType || 'video/mp4';
+    const blob = new Blob(state.recordedChunks, { type: mime });
+    // Determine extension — prefer .mp4 for iOS
+    let ext = 'mp4';
+    if (mime.includes('webm')) ext = 'webm';
+    showSaveModal(blob, ext);
+  };
+
+  state.mediaRecorder.start(1000);
+  state.recording = true;
+  state.timerSeconds = 0;
+  timerEl.classList.add('active');
+  state.timerInterval = setInterval(updateTimer, 1000);
+  btnRecord.classList.add('recording');
+}
+
+function stopRecording() {
+  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+    state.mediaRecorder.stop();
+  }
+  state.recording = false;
+  clearInterval(state.timerInterval);
+  timerEl.classList.remove('active');
+  btnRecord.classList.remove('recording');
+}
+
+$('btnRecord').onclick = () => state.recording ? stopRecording() : startRecording();
+
+// ===== SAVE MODAL =====
+let pendingBlob = null;
+let pendingExt = 'mp4';
+
+function showSaveModal(blob, ext) {
+  pendingBlob = blob;
+  pendingExt = ext;
+  // Update quality options to show file size estimates
+  const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+  saveModal.querySelector('h2').textContent = `Save Video (${sizeMB} MB)`;
+  saveModal.classList.add('active');
+}
+
+// Quality option selection
+document.querySelectorAll('.quality-option').forEach(opt => {
+  opt.onclick = () => {
+    document.querySelectorAll('.quality-option').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    state.saveQuality = opt.dataset.quality;
+  };
+});
+
+$('btnSaveCancel').onclick = () => {
+  saveModal.classList.remove('active');
+  pendingBlob = null;
+};
+
+$('btnSaveConfirm').onclick = () => {
+  if (!pendingBlob) return;
+  const url = URL.createObjectURL(pendingBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `prompter_${Date.now()}.${pendingExt}`;
+  a.click();
+  URL.revokeObjectURL(url);
+  saveModal.classList.remove('active');
+  pendingBlob = null;
+};
+
+saveModal.onclick = (e) => { if (e.target === saveModal) { saveModal.classList.remove('active'); pendingBlob = null; } };
+
+// ===== VIDEO QUALITY SELECT =====
+$('qualitySelect').onchange = function() {
+  state.videoQuality = this.value;
+};
+
+// ===== START PROMPTER =====
+$('btnStart').onclick = async () => {
+  const text = scriptInput.value.trim();
+  if (!text) { scriptInput.focus(); return; }
+
+  state.videoQuality = $('qualitySelect').value;
+
+  prompterText.textContent = text;
+  prompterText.style.fontSize = state.fontSize + 'px';
+  cameraView.classList.toggle('mirrored', state.mirror);
+  resetScroll();
+  liveSpeed.value = state.speed;
+
+  editorScreen.classList.remove('active');
+  prompterScreen.classList.add('active');
+
+  await startCamera();
+
+  // Measure actual text height after render
+  requestAnimationFrame(() => {
+    state.totalTextHeight = prompterText.offsetHeight;
+    updateLiveEta();
+  });
+
+  await doCountdown();
+  startScroll();
+};
+
+// ===== BACK =====
+$('btnBack').onclick = () => {
+  pauseScroll();
+  if (state.recording) stopRecording();
+  if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+  cameraView.srcObject = null;
+  prompterScreen.classList.remove('active');
+  editorScreen.classList.add('active');
+};
+
+// ===== TAP TO PAUSE/RESUME SCROLL =====
+$('prompterOverlay').onclick = (e) => {
+  if (e.target.closest('.prompter-controls')) return;
+  state.scrolling ? pauseScroll() : startScroll();
+};
+
+// ===== PREVENT SLEEP =====
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && prompterScreen.classList.contains('active')) {
+    requestWakeLock();
+  }
+});
+</script>
+</body>
+</html>
