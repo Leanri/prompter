@@ -985,8 +985,10 @@ function startRecording() {
     alert('Recording stopped due to an error. Try using 720p quality for longer videos.');
   };
 
-  // Use 500ms timeslice for more frequent keyframes — fixes choppy playback in editors
-  state.mediaRecorder.start(500);
+  // MP4 must record without timeslice — chunked recording corrupts the moov atom
+  // WebM handles timeslice fine and benefits from frequent keyframes
+  const isMP4 = (state.mediaRecorder.mimeType || '').includes('mp4');
+  state.mediaRecorder.start(isMP4 ? undefined : 1000);
   state.recording = true;
   state.timerSeconds = 0;
   timerEl.classList.add('active');
