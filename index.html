@@ -589,9 +589,9 @@
       <div class="setting-row">
         <span class="setting-label">Video Quality</span>
         <select class="setting-select" id="qualitySelect">
-          <option value="720">720p HD (15 Mbps)</option>
-          <option value="1080" selected>1080p Full HD (35 Mbps)</option>
-          <option value="2160">4K Ultra HD (100 Mbps)</option>
+          <option value="720">720p HD</option>
+          <option value="1080" selected>1080p Full HD</option>
+          <option value="2160">4K Ultra HD</option>
         </select>
       </div>
       <div class="setting-row">
@@ -704,7 +704,7 @@ const state = {
   videoQuality: '1080'
 };
 
-const qualityBitrates = { '720': 15000000, '1080': 35000000, '2160': 100000000 };
+const qualityBitrates = { '720': 5000000, '1080': 10000000, '2160': 25000000 };
 
 // ===== ELEMENTS =====
 const $ = id => document.getElementById(id);
@@ -860,7 +860,7 @@ async function startCamera() {
     const q = qualityMap[state.videoQuality] || qualityMap['1080'];
     state.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: 30 } },
-      audio: { echoCancellation: false, noiseSuppression: false, sampleRate: 48000 }
+      audio: { echoCancellation: false, noiseSuppression: false }
     });
     cameraView.srcObject = state.stream;
   } catch (err) {
@@ -939,7 +939,7 @@ function updateTimer() {
 }
 
 function getMimeType() {
-  // Prefer MP4 for iOS compatibility, fall back to WebM
+  // Prefer h264 codecs — best compatibility with video editors (CapCut, Premiere, etc.)
   const types = [
     'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
     'video/mp4',
@@ -958,7 +958,7 @@ function startRecording() {
   state.recordedChunks = [];
   const mimeType = getMimeType();
   const bitrate = qualityBitrates[state.videoQuality] || qualityBitrates['1080'];
-  const options = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 256000 };
+  const options = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 128000 };
   if (mimeType) options.mimeType = mimeType;
 
   try {
@@ -974,13 +974,19 @@ function startRecording() {
   state.mediaRecorder.onstop = () => {
     const mime = state.mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(state.recordedChunks, { type: mime });
-    // Determine extension — prefer .mp4 for iOS
     let ext = 'mp4';
     if (mime.includes('webm')) ext = 'webm';
     showSaveModal(blob, ext);
   };
 
-  state.mediaRecorder.start(1000);
+  state.mediaRecorder.onerror = (e) => {
+    console.error('Recording error:', e);
+    stopRecording();
+    alert('Recording stopped due to an error. Try using 720p quality for longer videos.');
+  };
+
+  // Use 500ms timeslice for more frequent keyframes — fixes choppy playback in editors
+  state.mediaRecorder.start(500);
   state.recording = true;
   state.timerSeconds = 0;
   timerEl.classList.add('active');
