@@ -858,14 +858,10 @@ async function startCamera() {
   try {
     if (state.stream) state.stream.getTracks().forEach(t => t.stop());
     const q = qualityMap[state.videoQuality] || qualityMap['1080'];
-    const videoConstraints = { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { exact: 30 } };
-    try {
-      state.stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: { echoCancellation: false, noiseSuppression: false } });
-    } catch {
-      // Fallback if exact 30fps not supported
-      videoConstraints.frameRate = { ideal: 30 };
-      state.stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: { echoCancellation: false, noiseSuppression: false } });
-    }
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
     cameraView.srcObject = state.stream;
   } catch (err) {
     console.error('Camera error:', err);
@@ -943,9 +939,11 @@ function updateTimer() {
 }
 
 function getMimeType() {
-  // Prefer h264 codecs — best compatibility with video editors (CapCut, Premiere, etc.)
+  // Prefer MP4 (supported in Chrome 121+, Safari) — works natively in CapCut/Premiere
+  // Fall back to WebM only if MP4 not available
   const types = [
     'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1',
     'video/mp4',
     'video/webm;codecs=h264,opus',
     'video/webm;codecs=vp9,opus',
@@ -958,88 +956,41 @@ function getMimeType() {
   return '';
 }
 
-// Create a constant-framerate stream by drawing camera to canvas at fixed 30fps
-// This fixes VFR (variable frame rate) that causes stuttering in CapCut/Premiere
-function createCFRStream() {
-  const videoTrack = state.stream.getVideoTracks()[0];
-  const settings = videoTrack.getSettings();
-  const w = settings.width || 1920;
-  const h = settings.height || 1080;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-
-  // Draw camera frames to canvas at exactly 30fps
-  const tempVideo = document.createElement('video');
-  tempVideo.srcObject = new MediaStream([videoTrack]);
-  tempVideo.muted = true;
-  tempVideo.playsInline = true;
-  tempVideo.play();
-
-  const intervalId = setInterval(() => {
-    ctx.drawImage(tempVideo, 0, 0, w, h);
-  }, 1000 / 30);
-
-  // Get constant 30fps stream from canvas
-  const canvasStream = canvas.captureStream(30);
-
-  // Add audio tracks from original stream
-  state.stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
-
-  // Store cleanup references
-  state._cfrCleanup = () => {
-    clearInterval(intervalId);
-    tempVideo.pause();
-    tempVideo.srcObject = null;
-  };
-
-  return canvasStream;
-}
-
 function startRecording() {
   state.recordedChunks = [];
   const mimeType = getMimeType();
+  const isMP4 = mimeType.includes('mp4');
   const bitrate = qualityBitrates[state.videoQuality] || qualityBitrates['1080'];
-  const options = {
-    videoBitsPerSecond: bitrate,
-    audioBitsPerSecond: 192000,
-    videoKeyFrameIntervalDuration: 2000,
-    videoKeyFrameIntervalCount: 60
-  };
+  const options = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 };
   if (mimeType) options.mimeType = mimeType;
 
-  // Use constant-framerate stream to avoid VFR stuttering in editors
-  const recordStream = createCFRStream();
-
   try {
-    state.mediaRecorder = new MediaRecorder(recordStream, options);
+    state.mediaRecorder = new MediaRecorder(state.stream, options);
   } catch {
-    state.mediaRecorder = new MediaRecorder(recordStream);
+    state.mediaRecorder = new MediaRecorder(state.stream);
   }
+
+  console.log('Recording format:', state.mediaRecorder.mimeType, '| Bitrate:', bitrate);
 
   state.mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) state.recordedChunks.push(e.data);
   };
 
   state.mediaRecorder.onstop = () => {
-    if (state._cfrCleanup) { state._cfrCleanup(); state._cfrCleanup = null; }
     const mime = state.mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(state.recordedChunks, { type: mime });
-    let ext = 'mp4';
-    if (mime.includes('webm')) ext = 'webm';
+    const ext = mime.includes('webm') ? 'webm' : 'mp4';
     showSaveModal(blob, ext);
   };
 
   state.mediaRecorder.onerror = (e) => {
     console.error('Recording error:', e);
     stopRecording();
-    alert('Recording stopped due to an error. Try using 720p quality for longer videos.');
+    alert('Recording stopped due to an error. Try lower quality.');
   };
 
-  // MP4 must record without timeslice — chunked recording corrupts the moov atom
-  const isMP4 = (state.mediaRecorder.mimeType || '').includes('mp4');
+  // IMPORTANT: MP4 must NOT use timeslice — it corrupts the moov atom
+  // WebM can use timeslice safely
   state.mediaRecorder.start(isMP4 ? undefined : 1000);
   state.recording = true;
   state.timerSeconds = 0;
@@ -1052,7 +1003,6 @@ function stopRecording() {
   if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
     state.mediaRecorder.stop();
   }
-  if (state._cfrCleanup) { state._cfrCleanup(); state._cfrCleanup = null; }
   state.recording = false;
   clearInterval(state.timerInterval);
   timerEl.classList.remove('active');
