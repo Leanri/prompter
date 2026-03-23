@@ -704,7 +704,7 @@ const state = {
   videoQuality: '1080'
 };
 
-const qualityBitrates = { '720': 5000000, '1080': 10000000, '2160': 25000000 };
+const qualityBitrates = { '720': 8000000, '1080': 16000000, '2160': 40000000 };
 
 // ===== ELEMENTS =====
 const $ = id => document.getElementById(id);
@@ -858,10 +858,14 @@ async function startCamera() {
   try {
     if (state.stream) state.stream.getTracks().forEach(t => t.stop());
     const q = qualityMap[state.videoQuality] || qualityMap['1080'];
-    state.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { ideal: 30 } },
-      audio: { echoCancellation: false, noiseSuppression: false }
-    });
+    const videoConstraints = { facingMode: state.facingMode, width: { ideal: q.w }, height: { ideal: q.h }, frameRate: { exact: 30 } };
+    try {
+      state.stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: { echoCancellation: false, noiseSuppression: false } });
+    } catch {
+      // Fallback if exact 30fps not supported
+      videoConstraints.frameRate = { ideal: 30 };
+      state.stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: { echoCancellation: false, noiseSuppression: false } });
+    }
     cameraView.srcObject = state.stream;
   } catch (err) {
     console.error('Camera error:', err);
@@ -958,7 +962,12 @@ function startRecording() {
   state.recordedChunks = [];
   const mimeType = getMimeType();
   const bitrate = qualityBitrates[state.videoQuality] || qualityBitrates['1080'];
-  const options = { videoBitsPerSecond: bitrate, audioBitsPerSecond: 128000 };
+  const options = {
+    videoBitsPerSecond: bitrate,
+    audioBitsPerSecond: 192000,
+    videoKeyFrameIntervalDuration: 2000,
+    videoKeyFrameIntervalCount: 60
+  };
   if (mimeType) options.mimeType = mimeType;
 
   try {
