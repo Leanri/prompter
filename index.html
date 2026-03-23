@@ -958,6 +958,46 @@ function getMimeType() {
   return '';
 }
 
+// Create a constant-framerate stream by drawing camera to canvas at fixed 30fps
+// This fixes VFR (variable frame rate) that causes stuttering in CapCut/Premiere
+function createCFRStream() {
+  const videoTrack = state.stream.getVideoTracks()[0];
+  const settings = videoTrack.getSettings();
+  const w = settings.width || 1920;
+  const h = settings.height || 1080;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // Draw camera frames to canvas at exactly 30fps
+  const tempVideo = document.createElement('video');
+  tempVideo.srcObject = new MediaStream([videoTrack]);
+  tempVideo.muted = true;
+  tempVideo.playsInline = true;
+  tempVideo.play();
+
+  const intervalId = setInterval(() => {
+    ctx.drawImage(tempVideo, 0, 0, w, h);
+  }, 1000 / 30);
+
+  // Get constant 30fps stream from canvas
+  const canvasStream = canvas.captureStream(30);
+
+  // Add audio tracks from original stream
+  state.stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
+  // Store cleanup references
+  state._cfrCleanup = () => {
+    clearInterval(intervalId);
+    tempVideo.pause();
+    tempVideo.srcObject = null;
+  };
+
+  return canvasStream;
+}
+
 function startRecording() {
   state.recordedChunks = [];
   const mimeType = getMimeType();
@@ -970,10 +1010,13 @@ function startRecording() {
   };
   if (mimeType) options.mimeType = mimeType;
 
+  // Use constant-framerate stream to avoid VFR stuttering in editors
+  const recordStream = createCFRStream();
+
   try {
-    state.mediaRecorder = new MediaRecorder(state.stream, options);
+    state.mediaRecorder = new MediaRecorder(recordStream, options);
   } catch {
-    state.mediaRecorder = new MediaRecorder(state.stream);
+    state.mediaRecorder = new MediaRecorder(recordStream);
   }
 
   state.mediaRecorder.ondataavailable = (e) => {
@@ -981,6 +1024,7 @@ function startRecording() {
   };
 
   state.mediaRecorder.onstop = () => {
+    if (state._cfrCleanup) { state._cfrCleanup(); state._cfrCleanup = null; }
     const mime = state.mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(state.recordedChunks, { type: mime });
     let ext = 'mp4';
@@ -995,7 +1039,6 @@ function startRecording() {
   };
 
   // MP4 must record without timeslice — chunked recording corrupts the moov atom
-  // WebM handles timeslice fine and benefits from frequent keyframes
   const isMP4 = (state.mediaRecorder.mimeType || '').includes('mp4');
   state.mediaRecorder.start(isMP4 ? undefined : 1000);
   state.recording = true;
@@ -1009,6 +1052,7 @@ function stopRecording() {
   if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
     state.mediaRecorder.stop();
   }
+  if (state._cfrCleanup) { state._cfrCleanup(); state._cfrCleanup = null; }
   state.recording = false;
   clearInterval(state.timerInterval);
   timerEl.classList.remove('active');
